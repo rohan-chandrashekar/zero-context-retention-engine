@@ -10,31 +10,24 @@ VARIANT_RESOLUTION = {
     "mobileclip_b": 224,
 }
 
-CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
-CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
-
-
 class ImageEncoderWrapper(torch.nn.Module):
-    def __init__(self, model, mean, std):
+    def __init__(self, model):
         super().__init__()
         self.model = model
-        self.register_buffer("mean", torch.tensor(mean).view(1, 3, 1, 1))
-        self.register_buffer("std", torch.tensor(std).view(1, 3, 1, 1))
 
     def forward(self, image):
-        normalized = (image - self.mean) / self.std
-        features = self.model.encode_image(normalized)
+        features = self.model.encode_image(image)
         return features / features.norm(dim=-1, keepdim=True)
 
 
 def export(variant, checkpoint, output):
     model, _, _ = mobileclip.create_model_and_transforms(variant, pretrained=checkpoint)
     model.eval()
-    wrapper = ImageEncoderWrapper(model, CLIP_MEAN, CLIP_STD).eval()
+    wrapper = ImageEncoderWrapper(model).eval()
     size = VARIANT_RESOLUTION[variant]
     example = torch.rand(1, 3, size, size)
-    with torch.no_grad():
-        traced = torch.jit.trace(wrapper, example)
+    exported = torch.export.export(wrapper, (example,))
+    exported = exported.run_decompositions({})
     image_input = ct.ImageType(
         name="image",
         shape=(1, 3, size, size),
@@ -43,7 +36,7 @@ def export(variant, checkpoint, output):
         color_layout=ct.colorlayout.RGB,
     )
     mlmodel = ct.convert(
-        traced,
+        exported,
         inputs=[image_input],
         outputs=[ct.TensorType(name="embedding")],
         minimum_deployment_target=ct.target.macOS14,
