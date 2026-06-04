@@ -3,9 +3,11 @@
 ## Current status
 Phase 0 complete and verified on hardware (Apple M1, iMac21,1, 16 GB, macOS 15.7.3). MobileCLIP-S2 image encoder exported to Core ML, benchmarked across compute units, and checked for correctness against the PyTorch reference.
 
+Phase 1 code complete and verified to build/load; measured run numbers are TBD pending an interactive GUI session (see below). The Swift engine (`swift build` clean, no warnings) compiles the Core ML model, opens the append-only vector store, and runs the ScreenCaptureKit -> scene-gate -> ANE-embed -> store loop, overwriting each pixel buffer in RAM and never writing a frame. Under Claude's non-interactive shell the run stops at `SCStreamError -3801` (Screen Recording TCC declined) via the engine's graceful permission path — the model-load and store-open paths execute first, so those are confirmed working.
+
 ## Phase checklist
 - [x] Phase 0 — MobileCLIP-S2 to Core ML conversion + embedding benchmark
-- [ ] Phase 1 — Capture spine + zero-retention proof
+- [~] Phase 1 — Capture spine + zero-retention proof (code done + builds; measured run TBD on GUI session)
 - [ ] Phase 2 — On-device OCR + semantic retrieval
 - [ ] Phase 3 — Privacy red-team + defense
 - [ ] Phase 4 — Benchmarks + visualizer + storytelling
@@ -23,6 +25,15 @@ Model: MobileCLIP-S2 image encoder, Core ML `mlprogram`, FP16, 512-d L2-normaliz
 Correctness:
 - Core ML vs PyTorch reference: cosine 0.9965 (FP16), max abs diff 0.0145.
 - CLIP zero-shot on the canonical two-cats image: correct caption at +0.312 cosine / 100% softmax.
+
+## Measured numbers (Phase 1)
+TBD. The capture loop needs Screen Recording (TCC) permission, which macOS grants only to an interactive GUI app/terminal, not to the headless build process Claude runs. Run on the GUI session per README "Phase 1 run", then fill: per-processed-frame latency (median/p95/mean), scene-gate skip rate, frames complete/embedded/skipped, vectors stored, and image bytes written (must read 0, cross-checked with `scripts/proof_zero_retention.sh`).
+
+Phase 1 design decisions (interview-defensible):
+- Capture is downscaled to 256×256 by ScreenCaptureKit itself (GPU), matching the model input with zero extra resize code. This is an anisotropic resize of the whole display, chosen deliberately to preserve all on-screen content (menu bar, dock, edges) rather than center-cropping it away, since the goal is "what was on screen," not a centered subject.
+- Scene gate is an 8×8 average hash (64-bit), Hamming-distance threshold default 5/64; first frame always counts as changed.
+- Privacy: each pixel buffer is `memset` to zero in RAM after embedding (and on skip) before release; this is a demonstrable in-memory overwrite, not just dropping the reference. The store is fixed-stride binary (8-byte float64 timestamp + 512 float32) for mmap-friendly brute-force search in Phase 2.
+- Vectors are already L2-normalized by the Phase 0 export wrapper, so Phase 2 cosine search is a dot product.
 
 ## Known issues / open threads
 - Pure-ANE latency from Xcode's Performance report is still TBD — it needs the Xcode GUI; the 3.00 ms figure is `predict()` wall-clock and is an upper bound on compute.
