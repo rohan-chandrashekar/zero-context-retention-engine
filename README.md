@@ -31,26 +31,32 @@ Cross-variant (S0/S1/B) and cross-chip (M1/M2/M4) comparisons are deferred to Ph
 
 ScreenCaptureKit captures the display directly downscaled to 256×256 BGRA on the GPU. Each frame passes an 8×8 average-hash scene-change gate (64-bit hash, Hamming-distance threshold) so near-identical frames skip the encoder. Frames that pass are embedded on the ANE via the Phase 0 Core ML model; only the 512-d vector and a timestamp are appended to an append-only binary store (`8-byte float64 timestamp + 512 float32`). The pixel buffer is never written to disk and is overwritten in RAM (`memset` to zero) before release.
 
-Numbers below are **TBD until measured on an interactive GUI session** — the capture loop requires Screen Recording (TCC) permission, which cannot be granted to the headless build process; running it under Claude's non-interactive shell returns `SCStreamError -3801` by design. Run it yourself (see *Phase 1 run* below) and these get filled with real values.
+Measured on **Apple M5 (MacBook Pro, Mac17,2, 16 GB, macOS 26.5.1)** — a different chip from the Phase 0 M1 above, so these numbers are **not** comparable to the Phase 0 table. A single 210 s capture session during real browsing/scrolling/app-switching; the `fs_usage` zero-retention proof traced the live process throughout.
 
 | Metric | Value |
 |---|---|
-| Per-processed-frame end-to-end latency — median / p95 / mean (ms) | _TBD_ |
-| Scene-change gate skip rate (% of complete frames skipped) | _TBD_ |
-| Frames complete / embedded / skipped | _TBD_ |
-| Vectors stored | _TBD_ |
-| **Image bytes written to disk** | **0** (by construction; verified with `fs_usage`) |
+| Per-processed-frame latency — median / p95 / mean (ms) | **6.97 / 28.72 / 10.20** (n=43, hash + embed + store) |
+| Scene-change gate skip rate (% of complete frames skipped) | **87.2 %** (292 of 335) |
+| Frames complete / embedded / skipped | **335 / 43 / 292** |
+| Vectors stored | **43** (store = 88,408 B = 43 × 2056, exact) |
+| **Image bytes written to disk** | **0** (proven; see below) |
 
-**Phase 1 run** (on your Mac, after granting Screen Recording to your terminal):
+The per-frame number is the **whole processed-frame path** — the full-frame average hash, the Core ML embed, and the store append — not the bare encoder call, so it is not the same quantity as the Phase 0 `predict()` latency. The scene gate skipped ~7 of every 8 frames *during active use*, paying the encoder only when the screen actually changed.
+
+**Zero-retention proof (measured, not asserted).** `fs_usage` traced every filesystem syscall of the live process. Across the run: no `open`/`read`/`write` ever referenced an image-file path, and the **largest single write was 2056 bytes — one vector record (8-byte timestamp + 512 float32), 127× smaller than a single raw 256×256×4 = 262,144-byte frame.** The complete write profile was 2056-byte vector records (fd 3), ≤43-byte text heartbeats to the engine's own log (fd 2), and 2-byte ScreenCaptureKit frame-ready wakeup tokens (fd 5). No frame, or any fraction of one approaching frame size, was ever written. The privacy invariant is thus a code-level guarantee (the pixel buffer has no write path and is `memset` to zero before release) *and* an observed property of the running process.
+
+**Phase 1 run** (on your Mac, after granting Screen Recording to the app hosting your terminal):
 
 ```bash
 swift build -c release
+bash scripts/run_phase1.sh 180          # launches the engine + runs the fs_usage proof as root
+# or drive the two halves manually:
 .build/release/zre --duration 180 --fps 2 --scene-threshold 5
-# in a second terminal, using the pid the engine prints:
-sudo bash scripts/proof_zero_retention.sh <pid> 180
+sudo bash scripts/proof_zero_retention.sh <pid> 180        # capture + analyze
+sudo bash scripts/proof_zero_retention.sh --analyze <log>  # re-analyze an existing trace
 ```
 
-The engine prints a live summary (frames complete/embedded/skipped, latency median/p95/mean, image bytes = 0). The proof script traces the process with `fs_usage` and asserts no image-file paths and no data writes outside the vector store.
+The engine prints a live summary (frames complete/embedded/skipped, latency median/p95/mean). The proof traces the process with `fs_usage`, asserts no image-file paths, and runs a write-size test: it reports the largest write and confirms it is far below one raw frame.
 
 ### Privacy red-team (Phase 3)
 
