@@ -42,7 +42,7 @@ Phase 1 design decisions (interview-defensible):
 - `requirements.txt` pins `torch==2.7.0` (Core ML Tools 9.0's tested version); MobileCLIP declares `torch>=2.8.0`, so `pip` prints a benign dependency-conflict warning. Inference/zero-shot verified identical on 2.7.0.
 - Core ML Tools 9.0 cannot convert the S2 graph via TorchScript tracing (`aten::Int` cast crash); we convert via the `torch.export` frontend with `run_decompositions({})`.
 - The published S2 checkpoint is already reparameterized; `reparameterize_model` is intentionally not called (it errors on the fused modules).
-- The `origin` remote embeds a GitHub PAT in its URL (in `.git/config`). Recommend rotating it and switching to `gh auth` + credential helper with a tokenless remote.
+- After the lab-Mac wipe the `origin` remote is a clean tokenless HTTPS URL (`https://github.com/rohan-chandrashekar/zero-context-retention-engine.git`) and `gh` is not installed, so `git push` prompts for credentials. Use a GitHub Personal Access Token (classic, `repo` scope) as the password, or install `gh` and run `gh auth login`. (Supersedes the earlier note about a PAT embedded in the remote URL, which the wipe removed.)
 - Benign data race on the live heartbeat: `CaptureEngine`'s main loop reads `processor.stats` counters every 5 s while the `zre.frames` dispatch queue writes them. The final summary is safe (read after `stopCapture()` returns, no callbacks in flight); only the live heartbeat reads race, on monotonic `Int` counters used for logging. Thread Sanitizer would flag it. Harden with a lock or atomics before this is interview-facing; left untouched for now to avoid perturbing the engine right before the measured run.
 
 ## Next action
