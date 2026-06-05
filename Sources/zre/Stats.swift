@@ -4,7 +4,6 @@ final class Stats {
     var framesComplete = 0
     var framesEmbedded = 0
     var framesSkipped = 0
-    var imageBytesWritten = 0
     var embedLatenciesMs: [Double] = []
 
     func percentile(_ p: Double) -> Double {
