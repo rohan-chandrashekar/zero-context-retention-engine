@@ -34,7 +34,7 @@ final class FrameProcessor: NSObject, SCStreamOutput, SCStreamDelegate {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let startTime = CFAbsoluteTimeGetCurrent()
-        stats.framesComplete += 1
+        stats.recordComplete()
 
         let hash = PerceptualHash.averageHash(pixelBuffer)
         let changed: Bool
@@ -46,7 +46,7 @@ final class FrameProcessor: NSObject, SCStreamOutput, SCStreamDelegate {
         previousHash = hash
 
         if !changed {
-            stats.framesSkipped += 1
+            stats.recordSkipped()
             if zeroBuffers { PerceptualHash.overwriteInMemory(pixelBuffer) }
             return
         }
@@ -54,9 +54,8 @@ final class FrameProcessor: NSObject, SCStreamOutput, SCStreamDelegate {
         do {
             let vector = try embedder.embed(pixelBuffer)
             try store.append(timestamp: Date().timeIntervalSince1970, vector: vector)
-            stats.framesEmbedded += 1
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
-            stats.embedLatenciesMs.append(elapsedMs)
+            stats.recordEmbedded(latencyMs: elapsedMs)
             if verbose {
                 FileHandle.standardError.write(Data("embedded frame \(stats.framesEmbedded) in \(String(format: "%.2f", elapsedMs)) ms\n".utf8))
             }

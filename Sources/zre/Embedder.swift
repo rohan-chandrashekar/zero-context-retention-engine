@@ -59,6 +59,9 @@ final class Embedder {
         case .int32:
             let pointer = array.dataPointer.assumingMemoryBound(to: Int32.self)
             for i in 0..<count { result[i] = Float(pointer[i]) }
+        case .int8:
+            let pointer = array.dataPointer.assumingMemoryBound(to: Int8.self)
+            for i in 0..<count { result[i] = Float(pointer[i]) }
         @unknown default:
             for i in 0..<count { result[i] = array[i].floatValue }
         }

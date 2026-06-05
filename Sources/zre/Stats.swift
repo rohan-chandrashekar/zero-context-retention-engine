@@ -1,14 +1,59 @@
 import Foundation
 
 final class Stats {
-    var framesComplete = 0
-    var framesEmbedded = 0
-    var framesSkipped = 0
-    var embedLatenciesMs: [Double] = []
+    private let lock = NSLock()
+    private var completeCount = 0
+    private var embeddedCount = 0
+    private var skippedCount = 0
+    private var latenciesMs: [Double] = []
+
+    func recordComplete() {
+        lock.lock()
+        completeCount += 1
+        lock.unlock()
+    }
+
+    func recordSkipped() {
+        lock.lock()
+        skippedCount += 1
+        lock.unlock()
+    }
+
+    func recordEmbedded(latencyMs: Double) {
+        lock.lock()
+        embeddedCount += 1
+        latenciesMs.append(latencyMs)
+        lock.unlock()
+    }
+
+    var framesComplete: Int {
+        lock.lock(); defer { lock.unlock() }
+        return completeCount
+    }
+
+    var framesEmbedded: Int {
+        lock.lock(); defer { lock.unlock() }
+        return embeddedCount
+    }
+
+    var framesSkipped: Int {
+        lock.lock(); defer { lock.unlock() }
+        return skippedCount
+    }
+
+    var latencyCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return latenciesMs.count
+    }
+
+    private func sortedLatencies() -> [Double] {
+        lock.lock(); defer { lock.unlock() }
+        return latenciesMs.sorted()
+    }
 
     func percentile(_ p: Double) -> Double {
-        guard !embedLatenciesMs.isEmpty else { return 0 }
-        let sorted = embedLatenciesMs.sorted()
+        let sorted = sortedLatencies()
+        guard !sorted.isEmpty else { return 0 }
         let rank = p / 100.0 * Double(sorted.count - 1)
         let lower = Int(rank.rounded(.down))
         let upper = Int(rank.rounded(.up))
@@ -19,13 +64,16 @@ final class Stats {
 
     var median: Double { percentile(50) }
     var p95: Double { percentile(95) }
+
     var mean: Double {
-        guard !embedLatenciesMs.isEmpty else { return 0 }
-        return embedLatenciesMs.reduce(0, +) / Double(embedLatenciesMs.count)
+        let sorted = sortedLatencies()
+        guard !sorted.isEmpty else { return 0 }
+        return sorted.reduce(0, +) / Double(sorted.count)
     }
 
     var skipRate: Double {
-        guard framesComplete > 0 else { return 0 }
-        return Double(framesSkipped) / Double(framesComplete) * 100.0
+        lock.lock(); defer { lock.unlock() }
+        guard completeCount > 0 else { return 0 }
+        return Double(skippedCount) / Double(completeCount) * 100.0
     }
 }
