@@ -27,7 +27,9 @@ Correctness:
 - CLIP zero-shot on the canonical two-cats image: correct caption at +0.312 cosine / 100% softmax.
 
 ## Measured numbers (Phase 1)
-TBD. The capture loop needs Screen Recording (TCC) permission, which macOS grants only to an interactive GUI app/terminal, not to the headless build process Claude runs. Run on the GUI session per README "Phase 1 run", then fill: per-processed-frame latency (median/p95/mean), scene-gate skip rate, frames complete/embedded/skipped, vectors stored, and image bytes written (must read 0, cross-checked with `scripts/proof_zero_retention.sh`).
+TBD. The capture loop needs Screen Recording (TCC) permission. On the ASU lab iMac this is admin-gated — the account is non-admin (the System Settings toggle demands a separate administrator username + password), so neither the manual toggle nor the headless build process Claude runs can grant it. Decision (2026-06-04): run the live ScreenCaptureKit path on a personal/friend's Apple Silicon Mac where the user has admin, and label that machine in the docs (it will differ from the Phase 0 iMac M1; the two are on different chips and must not be compared directly). Then fill: per-processed-frame latency (median/p95/mean), scene-gate skip rate, frames complete/embedded/skipped, vectors stored, and image bytes written (must read 0, cross-checked with `scripts/proof_zero_retention.sh`).
+
+Honesty fix applied (commit dfc927a): the run summary previously printed `image bytes written` from `Stats.imageBytesWritten`, a field nothing ever set — a hardcoded 0 dressed as a measurement, which violates the cardinal rule. Dropped the dead field; the summary now states 0 as a by-construction claim and points to the external `fs_usage` proof as the actual evidence. The latency line is relabeled "per-frame latency [hash + embed + store]" to match what is timed.
 
 Phase 1 design decisions (interview-defensible):
 - Capture is downscaled to 256×256 by ScreenCaptureKit itself (GPU), matching the model input with zero extra resize code. This is an anisotropic resize of the whole display, chosen deliberately to preserve all on-screen content (menu bar, dock, edges) rather than center-cropping it away, since the goal is "what was on screen," not a centered subject.
@@ -41,6 +43,7 @@ Phase 1 design decisions (interview-defensible):
 - Core ML Tools 9.0 cannot convert the S2 graph via TorchScript tracing (`aten::Int` cast crash); we convert via the `torch.export` frontend with `run_decompositions({})`.
 - The published S2 checkpoint is already reparameterized; `reparameterize_model` is intentionally not called (it errors on the fused modules).
 - The `origin` remote embeds a GitHub PAT in its URL (in `.git/config`). Recommend rotating it and switching to `gh auth` + credential helper with a tokenless remote.
+- Benign data race on the live heartbeat: `CaptureEngine`'s main loop reads `processor.stats` counters every 5 s while the `zre.frames` dispatch queue writes them. The final summary is safe (read after `stopCapture()` returns, no callbacks in flight); only the live heartbeat reads race, on monotonic `Int` counters used for logging. Thread Sanitizer would flag it. Harden with a lock or atomics before this is interview-facing; left untouched for now to avoid perturbing the engine right before the measured run.
 
 ## Next action
 Phase 1 — ScreenCaptureKit capture loop → perceptual-hash scene-change gate → Core ML MobileCLIP embedding → store vector + timestamp; release/zero the pixel buffer immediately and never write a frame. Build the zero-retention proof: monitor the process with `fs_usage` and assert zero image bytes written. Report per-processed-frame end-to-end latency, scene-change skip rate, and vectors stored.
