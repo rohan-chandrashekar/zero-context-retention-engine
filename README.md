@@ -120,6 +120,19 @@ python scripts/eval_defense.py --labels vectorstore/labels.json   # before/after
 python scripts/selftest_defense.py                           # numpy-only: defenses + scoring math (runs anywhere)
 ```
 
+### Cross-variant benchmark + visualizer (Phase 4)
+
+A cross-variant benchmark (`scripts/bench_all.py`) times the MobileCLIP **S0 / S1 / S2 / B** image encoders across ANE / GPU / CPU and emits a markdown table; if another Mac generation is available, the same script run there adds a machine column. A small local web visualizer (`viz/index.html`, fed by `scripts/export_viz.py`) shows three screen-recordable panels: the pixel buffer being wiped each cycle, a PCA concept map of the stored vectors growing as you browse, and the attacker's reconstruction collapsing after the defense. `DEMO.md` holds the LinkedIn post and the 30–60 s video script.
+
+| Variant | Model size (MB) | ANE median (ms) | Throughput (img/s) |
+|---|---|---|---|
+| MobileCLIP-S0 | _TBD (M5)_ | _TBD (M5)_ | _TBD (M5)_ |
+| MobileCLIP-S1 | _TBD (M5)_ | _TBD (M5)_ | _TBD (M5)_ |
+| MobileCLIP-S2 | _TBD (M5)_ | _TBD (M5)_ | _TBD (M5)_ |
+| MobileCLIP-B | _TBD (M5)_ | _TBD (M5)_ | _TBD (M5)_ |
+
+All Phase 4 latency/size numbers come from the single M5 run (see `MEASURE.md` section F). The visualizer and benchmark code are complete; the PCA projection and table emitter are verified machine-independently.
+
 ## Architecture
 
 ```

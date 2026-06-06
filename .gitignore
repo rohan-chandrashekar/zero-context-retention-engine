@@ -15,6 +15,8 @@ DerivedData/
 vectorstore/
 captures/
 attack_images/
+viz/data.json
+viz/*.png
 *.sqlite
 *.db
 labels.json

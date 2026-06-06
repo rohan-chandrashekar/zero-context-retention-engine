@@ -28,4 +28,7 @@ Engineering done (real); the machine-independent attack/defense math is verified
 - Built two attacks against the engine's own vector store, with no image available to the attacker: a **semantic-leakage** attack that recovers what was on screen by scoring stored image vectors against a sensitive-label vocabulary through the MobileCLIP text encoder, and a **feature-inversion** decoder that reconstructs a 64×64 image from a 512-d embedding (SSIM-scored). _Top-1 recovery and inversion SSIM: TBD (M5)._
 - Implemented three in-place vector defenses — PCA low-rank, scalar quantization, and additive Gaussian (DP-style) noise with an indicative ε — and a before/after harness that measures attack-fidelity collapse against retained Phase 2 retrieval accuracy, so the privacy/utility trade-off is a measured curve, not a slogan. _Before/after table: TBD (M5)._
 
-## Phase 4 — _pending_
+## Phase 4 — Benchmarks + visualizer + storytelling (code complete; benchmark numbers pending the M5 run)
+
+- Wrote a cross-variant Core ML benchmark harness (MobileCLIP S0/S1/S2/B across ANE/GPU/CPU) that emits a labeled markdown table, structured to extend to multiple Mac generations. _Cross-variant table: TBD (M5)._
+- Built a screen-recordable local web visualizer (three panels: the RAM buffer being wiped each cycle, a growing PCA concept map of the stored vectors, and the attacker's reconstruction collapsing after the defense) plus a DEMO.md with a LinkedIn post and a 30–60s video script. The PCA projection + data exporter are verified machine-independently; the demo numbers stay bracketed until measured.

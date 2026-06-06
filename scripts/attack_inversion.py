@@ -85,6 +85,14 @@ def mean_ssim(decoder, embeddings, targets, device):
     return float(np.mean(scores)) if scores else float("nan")
 
 
+def save_reconstruction(decoder, embeddings, path, device, upscale=256):
+    decoder.eval()
+    with torch.no_grad():
+        prediction = decoder(torch.from_numpy(embeddings[:1]).to(device)).cpu().numpy()[0]
+    image = (np.clip(prediction.transpose(1, 2, 0), 0.0, 1.0) * 255).astype(np.uint8)
+    Image.fromarray(image).resize((upscale, upscale), Image.NEAREST).save(path)
+
+
 def main(args):
     device = torch.device("cpu")
     image_model = ct.models.MLModel(args.image_model)
@@ -114,6 +122,14 @@ def main(args):
         defended_ssim = mean_ssim(decoder, defended, targets[test_idx], device)
         print(f"{(kind + ':' + param):<16}{defended_ssim:>16.4f}")
 
+    if args.dump:
+        os.makedirs(args.dump, exist_ok=True)
+        save_reconstruction(decoder, embeddings[test_idx], os.path.join(args.dump, "recon_clean.png"), device)
+        kind, param = (args.defenses[0].split(":", 1) + ["0"])[:2]
+        defended = apply_defense(embeddings[test_idx], kind, param, rng=rng)
+        save_reconstruction(decoder, defended, os.path.join(args.dump, "recon_defended.png"), device)
+        print(f"dumped reconstructions -> {args.dump}/recon_clean.png, {args.dump}/recon_defended.png")
+
     print()
     print("attacker trains on clean (image, embedding) pairs, then inverts the stored (possibly defended) embeddings.")
     print("lower SSIM under a defense = the reconstruction collapses = the defense works.")
@@ -127,5 +143,6 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--defenses", nargs="+", default=["pca:64", "quantize:4", "dpnoise:0.1", "dpnoise:0.2"])
+    parser.add_argument("--dump", default=None)
     args = parser.parse_args()
     main(args)

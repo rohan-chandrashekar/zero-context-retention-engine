@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zero-Retention Context Engine — Visualizer</title>
+<style>
+  :root { --bg:#0b0e14; --panel:#131824; --line:#222b3a; --ink:#e6edf3; --dim:#8b98a9; --accent:#4cc2ff; --warn:#ff6b6b; --ok:#5ee0a0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,Roboto,sans-serif; }
+  header { padding:18px 24px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:18px; letter-spacing:.2px; }
+  header p { margin:4px 0 0; color:var(--dim); }
+  .grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; padding:16px 24px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; min-height:340px; display:flex; flex-direction:column; }
+  .panel h2 { margin:0 0 4px; font-size:13px; text-transform:uppercase; letter-spacing:.6px; color:var(--accent); }
+  .panel .sub { color:var(--dim); margin:0 0 10px; font-size:12px; }
+  canvas { width:100%; background:#070a10; border-radius:8px; border:1px solid var(--line); flex:1; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid var(--line); color:var(--dim); }
+  .recon { display:flex; gap:10px; }
+  .recon figure { margin:0; flex:1; text-align:center; }
+  .recon img { width:100%; image-rendering:pixelated; border-radius:8px; border:1px solid var(--line); background:#070a10; aspect-ratio:1/1; object-fit:cover; }
+  .recon figcaption { font-size:11px; color:var(--dim); margin-top:6px; }
+  .miss { color:var(--warn); }
+  .hint { color:var(--dim); font-size:12px; margin-top:10px; min-height:34px; }
+  footer { color:var(--dim); padding:8px 24px 22px; font-size:12px; }
+  .status { color:var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Zero-Retention Context Engine</h1>
+  <p>The meaning is kept; the pixels are not. <span class="tag">on-device</span> <span class="tag">ScreenCaptureKit → MobileCLIP (ANE) → vectors</span></p>
+</header>
+
+<div class="grid">
+  <section class="panel">
+    <h2>1 · Memory wiped every cycle</h2>
+    <p class="sub">Each frame is captured, embedded, then <code>memset(0)</code> in RAM. No frame is written.</p>
+    <canvas id="wipe" width="320" height="240"></canvas>
+    <div class="hint" id="wipeHint">capturing…</div>
+  </section>
+
+  <section class="panel">
+    <h2>2 · Concept map (PCA of stored vectors)</h2>
+    <p class="sub">Each dot is one retained moment — a 512-d vector, no image. It grows as you browse.</p>
+    <canvas id="map" width="320" height="240"></canvas>
+    <div class="hint" id="mapHint">loading data.json…</div>
+  </section>
+
+  <section class="panel">
+    <h2>3 · Attacker's reconstruction, defeated</h2>
+    <p class="sub">Feature-inversion before vs after the defense (drop in SSIM = privacy holds).</p>
+    <div class="recon">
+      <figure><img id="reconClean" alt="clean reconstruction" /><figcaption>from raw vectors</figcaption></figure>
+      <figure><img id="reconDef" alt="defended reconstruction" /><figcaption>after defense</figcaption></figure>
+    </div>
+    <div class="hint" id="reconHint"></div>
+  </section>
+</div>
+
+<footer>
+  Static visualizer — reads <code>viz/data.json</code> (run <code>scripts/export_viz.py</code>) and optional
+  <code>viz/recon_clean.png</code> / <code>viz/recon_defended.png</code> (run <code>scripts/attack_inversion.py --dump viz</code>).
+  Serve with <code>python3 -m http.server</code> from the repo root, open <code>/viz/</code>.
+</footer>
+
+<script>
+(function () {
+  const wipe = document.getElementById("wipe");
+  const wctx = wipe.getContext("2d");
+  const wipeHint = document.getElementById("wipeHint");
+  const cell = 8, cols = wipe.width / cell, rows = wipe.height / cell;
+  let phase = 0, t = 0;
+  function frame() {
+    t += 1;
+    if (phase === 0) {
+      for (let i = 0; i < 40; i++) {
+        const x = (Math.random() * cols) | 0, y = (Math.random() * rows) | 0;
+        const v = 40 + (Math.random() * 180 | 0);
+        wctx.fillStyle = `rgb(${v},${(v * 0.7) | 0},${(v * 1.1) | 0})`;
+        wctx.fillRect(x * cell, y * cell, cell, cell);
+      }
+      wipeHint.textContent = "frame captured → embedding on Neural Engine…";
+      if (t > 45) { phase = 1; t = 0; }
+    } else if (phase === 1) {
+      wipeHint.innerHTML = '<span class="status">vector stored · pixel buffer memset(0)</span>';
+      wctx.fillStyle = "rgba(7,10,16,0.28)";
+      wctx.fillRect(0, 0, wipe.width, wipe.height);
+      if (t > 24) { phase = 0; t = 0; }
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+
+  const map = document.getElementById("map");
+  const mctx = map.getContext("2d");
+  const mapHint = document.getElementById("mapHint");
+  function plot(moments) {
+    const W = map.width, H = map.height, pad = 18;
+    let shown = 0;
+    function draw() {
+      mctx.fillStyle = "#070a10"; mctx.fillRect(0, 0, W, H);
+      for (let i = 0; i < shown; i++) {
+        const m = moments[i];
+        const x = pad + (m.x * 0.5 + 0.5) * (W - 2 * pad);
+        const y = pad + (m.y * 0.5 + 0.5) * (H - 2 * pad);
+        const a = 0.35 + 0.65 * (i / Math.max(1, moments.length - 1));
+        mctx.beginPath(); mctx.arc(x, y, 4, 0, Math.PI * 2);
+        mctx.fillStyle = `rgba(76,194,255,${a})`; mctx.fill();
+      }
+      if (shown < moments.length) { shown++; setTimeout(draw, 90); }
+      const latest = moments[Math.max(0, shown - 1)];
+      mapHint.textContent = `${shown}/${moments.length} moments` + (latest && latest.text ? ` · "${latest.text}"` : "");
+    }
+    draw();
+  }
+  fetch("data.json").then(r => r.json()).then(d => {
+    if (!d.moments || d.moments.length === 0) { mapHint.textContent = "data.json has no moments yet — run a capture first."; return; }
+    plot(d.moments);
+  }).catch(() => { mapHint.textContent = "no data.json found — run scripts/export_viz.py"; });
+
+  const reconClean = document.getElementById("reconClean");
+  const reconDef = document.getElementById("reconDef");
+  const reconHint = document.getElementById("reconHint");
+  let missing = 0;
+  function onErr() { missing++; if (missing >= 2) reconHint.innerHTML = '<span class="miss">no reconstruction images — run scripts/attack_inversion.py --dump viz</span>'; }
+  reconClean.onerror = onErr; reconDef.onerror = onErr;
+  reconClean.src = "recon_clean.png"; reconDef.src = "recon_defended.png";
+})();
+</script>
+</body>
+</html>

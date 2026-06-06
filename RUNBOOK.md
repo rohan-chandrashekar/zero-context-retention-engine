@@ -130,6 +130,19 @@ Repo root:
 - `scripts/eval_retrieval.py` — top-1 / precision@k / MRR against a hand-labeled `vectorstore/labels.json`.
 - `scripts/labels.template.json` — copy to `vectorstore/labels.json` and fill in relevant indices.
 - `scripts/proof_zero_retention.sh` / `scripts/run_phase1.sh` — zero-retention `fs_usage` proof + one-command capture run.
+- `scripts/redteam_common.py` — Phase 3 shared math: PCA / quantize / Gaussian-noise defenses, leakage scoring, metrics.
+- `scripts/leakage_vocab.txt` — candidate sensitive labels the semantic-leakage attack scores against.
+- `scripts/attack_semantic_leakage.py` / `scripts/attack_inversion.py` — the two privacy attacks.
+- `scripts/defense.py` / `scripts/eval_defense.py` — apply a defense; before/after leakage-vs-retrieval table.
+- `scripts/bench_all.py` — cross-variant Core ML benchmark table (Phase 4).
+- `scripts/export_viz.py` — write `viz/data.json` (PCA concept map) for the visualizer.
+- `scripts/selftest_retrieval.py` / `scripts/selftest_defense.py` — numpy-only self-tests (run anywhere; no torch/coremltools).
+- `scripts/run_all_measurements.sh` — the M5 turn-key driver for the deterministic measurements.
+
+Top-level docs added later:
+- `MEASURE.md` — the single Apple-Silicon (M5) measurement session, step by step; where each number goes.
+- `DEMO.md` — LinkedIn post + 30–60 s video script (numbers bracketed until measured).
+- `viz/index.html` — the screen-recordable three-panel visualizer (reads `viz/data.json` + `viz/recon_*.png`).
 
 Created locally as you build, and NEVER committed (the .gitignore handles this):
 - `.venv/` — Python virtual environment.
