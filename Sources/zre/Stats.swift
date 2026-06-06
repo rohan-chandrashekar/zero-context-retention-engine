@@ -6,6 +6,8 @@ final class Stats {
     private var embeddedCount = 0
     private var skippedCount = 0
     private var latenciesMs: [Double] = []
+    private var ocrLatenciesMs: [Double] = []
+    private var charsRecognizedTotal = 0
 
     func recordComplete() {
         lock.lock()
@@ -19,10 +21,12 @@ final class Stats {
         lock.unlock()
     }
 
-    func recordEmbedded(latencyMs: Double) {
+    func recordEmbedded(latencyMs: Double, ocrMs: Double, chars: Int) {
         lock.lock()
         embeddedCount += 1
         latenciesMs.append(latencyMs)
+        if ocrMs > 0 { ocrLatenciesMs.append(ocrMs) }
+        charsRecognizedTotal += chars
         lock.unlock()
     }
 
@@ -46,13 +50,17 @@ final class Stats {
         return latenciesMs.count
     }
 
-    private func sortedLatencies() -> [Double] {
+    var ocrCount: Int {
         lock.lock(); defer { lock.unlock() }
-        return latenciesMs.sorted()
+        return ocrLatenciesMs.count
     }
 
-    func percentile(_ p: Double) -> Double {
-        let sorted = sortedLatencies()
+    var charsRecognized: Int {
+        lock.lock(); defer { lock.unlock() }
+        return charsRecognizedTotal
+    }
+
+    private static func percentile(_ p: Double, of sorted: [Double]) -> Double {
         guard !sorted.isEmpty else { return 0 }
         let rank = p / 100.0 * Double(sorted.count - 1)
         let lower = Int(rank.rounded(.down))
@@ -62,13 +70,35 @@ final class Stats {
         return sorted[lower] * (1 - weight) + sorted[upper] * weight
     }
 
-    var median: Double { percentile(50) }
-    var p95: Double { percentile(95) }
+    private static func mean(of values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    func latencyPercentile(_ p: Double) -> Double {
+        lock.lock(); let sorted = latenciesMs.sorted(); lock.unlock()
+        return Stats.percentile(p, of: sorted)
+    }
+
+    func ocrPercentile(_ p: Double) -> Double {
+        lock.lock(); let sorted = ocrLatenciesMs.sorted(); lock.unlock()
+        return Stats.percentile(p, of: sorted)
+    }
+
+    var median: Double { latencyPercentile(50) }
+    var p95: Double { latencyPercentile(95) }
 
     var mean: Double {
-        let sorted = sortedLatencies()
-        guard !sorted.isEmpty else { return 0 }
-        return sorted.reduce(0, +) / Double(sorted.count)
+        lock.lock(); let values = latenciesMs; lock.unlock()
+        return Stats.mean(of: values)
+    }
+
+    var ocrMedian: Double { ocrPercentile(50) }
+    var ocrP95: Double { ocrPercentile(95) }
+
+    var ocrMean: Double {
+        lock.lock(); let values = ocrLatenciesMs; lock.unlock()
+        return Stats.mean(of: values)
     }
 
     var skipRate: Double {

@@ -16,6 +16,7 @@ vectorstore/
 captures/
 *.sqlite
 *.db
+labels.json
 
 .env
 *.token

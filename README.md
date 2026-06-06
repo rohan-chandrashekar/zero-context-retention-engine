@@ -58,6 +58,43 @@ sudo bash scripts/proof_zero_retention.sh --analyze <log>  # re-analyze an exist
 
 The engine prints a live summary (frames complete/embedded/skipped, latency median/p95/mean). The proof traces the process with `fs_usage`, asserts no image-file paths, and runs a write-size test: it reports the largest write and confirms it is far below one raw frame.
 
+### On-device OCR + semantic retrieval (Phase 2)
+
+Each kept frame now also passes through Apple's **Vision** OCR (`VNRecognizeTextRequest`, on-device, no network), and the recognized text is stored next to the vector — still no image. A natural-language query is embedded with the **MobileCLIP text encoder** (exported to Core ML alongside the image encoder) and ranked against the stored image vectors by cosine similarity, so *"when was I looking at X"* returns timestamped moments.
+
+**Resolution change (why the pipeline differs from Phase 1).** OCR needs legible text, which a 256×256 thumbnail of a whole display does not have. So Phase 2 captures at the display's **native resolution**, runs OCR on that frame, then downscales to 256×256 (vImage / Accelerate) for the embedder. Both the native frame and the 256×256 derivative are `memset` to zero in RAM and never written to disk — the privacy invariant is unchanged; only the per-frame compute path changed, so the Phase 1 latency above is not comparable and is re-measured here.
+
+**Store layout.** Vectors stay in the Phase 1 fixed-stride binary store (`8-byte float64 timestamp + 512 float32`) so brute-force cosine search stays mmap-friendly and the zero-retention write-size proof still holds. OCR text goes in a **parallel JSONL sidecar** (`{"i": index, "t": timestamp, "text": ...}`), aligned to the vector store by record index and timestamp. Variable-length text never perturbs the fixed-stride vector file.
+
+All Phase 2 numbers are **pending the single M5 measurement run** (per the build-here / measure-on-M5 plan); retrieval-quality numbers are machine-independent (CPU and ANE produce the same vectors modulo FP16) and will be measured on a hand-labeled capture.
+
+| Metric | Value |
+|---|---|
+| Text encoder Core ML export — cosine vs PyTorch | _TBD — run `scripts/verify_text_coreml.py`_ |
+| Per-frame latency [downscale + hash + OCR + embed + store], median / p95 / mean | _TBD (M5)_ |
+| OCR latency (Vision, accurate), median / p95 / mean | _TBD (M5)_ |
+| Retrieval top-1 accuracy / precision@5 / MRR (hand-labeled set) | _TBD (machine-independent; needs a labeled capture)_ |
+
+**Run it:**
+
+```bash
+# 1. export the text encoder (mirrors the Phase 0 image export, torch.export frontend)
+python scripts/export_coreml.py --encoder text --output MobileCLIPText.mlpackage
+python scripts/verify_text_coreml.py --model MobileCLIPText.mlpackage   # cosine vs PyTorch
+
+# 2. capture with OCR on (native-res capture, 256x256 embed)
+.build/release/zre --duration 180 --fps 2 --scene-threshold 5         # --no-ocr to skip OCR
+
+# 3. ask "when was I looking at X"
+python scripts/query.py --query "a code editor with Swift source" --k 5
+python scripts/dump_store.py        # list every stored moment (idx, time, OCR snippet) for labeling
+
+# 4. measure retrieval precision on a hand-labeled set
+#    copy scripts/labels.template.json -> vectorstore/labels.json, fill in the relevant
+#    record indices (from dump_store.py) for each query, then:
+python scripts/eval_retrieval.py --labels vectorstore/labels.json --k 5
+```
+
 ### Privacy red-team (Phase 3)
 
 | Defense | Reconstruction fidelity (↓ better) | Retrieval accuracy retained (↑ better) |

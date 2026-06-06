@@ -1,0 +1,6 @@
+[
+  {"query": "a code editor showing source code", "relevant": [3, 4, 5]},
+  {"query": "a bank or banking login page", "relevant": [12]},
+  {"query": "a YouTube or video player", "relevant": [20, 21]},
+  {"query": "a terminal or command line", "relevant": [7, 8]}
+]

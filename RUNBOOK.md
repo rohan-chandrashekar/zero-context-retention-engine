@@ -121,14 +121,21 @@ Repo root:
 - `.gitignore` — keeps regenerable artifacts and personal data OUT of the repo.
 
 `scripts/` folder:
-- `scripts/export_coreml.py` — converts MobileCLIP to Core ML.
+- `scripts/export_coreml.py` — converts MobileCLIP to Core ML (`--encoder image` default, `--encoder text` for the text tower).
 - `scripts/bench_coreml.py` — benchmarks embedding latency and model size.
+- `scripts/verify_coreml.py` / `scripts/verify_text_coreml.py` — cosine check of the Core ML image / text encoder vs the PyTorch reference.
+- `scripts/retrieval_common.py` — shared store + text-sidecar loaders and query embedding (imported by the next three).
+- `scripts/query.py` — embed a text query, return top-k stored moments (timestamp + OCR snippet).
+- `scripts/dump_store.py` — list every stored moment (idx, time, OCR snippet) to build a labeled set.
+- `scripts/eval_retrieval.py` — top-1 / precision@k / MRR against a hand-labeled `vectorstore/labels.json`.
+- `scripts/labels.template.json` — copy to `vectorstore/labels.json` and fill in relevant indices.
+- `scripts/proof_zero_retention.sh` / `scripts/run_phase1.sh` — zero-retention `fs_usage` proof + one-command capture run.
 
 Created locally as you build, and NEVER committed (the .gitignore handles this):
 - `.venv/` — Python virtual environment.
 - `checkpoints/` — downloaded MobileCLIP weights.
-- `MobileCLIPImage.mlpackage` — the exported Core ML model.
-- `vectorstore/` and any `captures/` — embeddings of your real screen content. Stays local for privacy; regenerable.
+- `MobileCLIPImage.mlpackage` / `MobileCLIPText.mlpackage` — the exported Core ML image + text encoders.
+- `vectorstore/` — `vectors.f32bin` (vectors + timestamps), `text.jsonl` (OCR sidecar), and `labels.json` (your hand labels). Embeddings of your real screen content; stays local for privacy; regenerable.
 - `.build/` — the Swift package build folder.
 
 Files that do not exist yet and that Claude Code creates as phases progress: the Swift package (`Package.swift` + `Sources/`), `RESUME_BULLETS.md`, the `DEMO.md`, and the visualizer.

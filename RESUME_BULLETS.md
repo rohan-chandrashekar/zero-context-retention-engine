@@ -13,6 +13,13 @@ Interview-defensible. Every number is measured on real hardware — no estimates
 - Built a Swift / ScreenCaptureKit capture engine that embeds the screen on the Neural Engine and keeps only 512-d vectors plus timestamps — raw frames are never written to disk and the pixel buffer is overwritten in RAM (`memset`) before release, making the "anti-Recall" privacy invariant a code-level guarantee rather than a policy. Measured at **6.97 ms median** per processed frame (10.20 ms mean, n=43) for the full hash + ANE-embed + store path.
 - Added an 8×8 average-hash scene-change gate that skips near-identical frames before the encoder runs: over a 210 s real-browsing session it **skipped 87.2% of frames** (292 of 335), so the encoder ran only on the ~1-in-8 frames where the screen actually changed.
 - Proved the privacy claim adversarially rather than asserting it: an `fs_usage` syscall trace of the live process showed **zero image-file paths and a largest single write of 2056 bytes — one vector record, 127× smaller than a raw 262,144-byte frame** — so no frame, or any fraction near frame size, was ever written. The on-disk store (88,408 B) equals 43 × 2056 exactly, tying every byte on disk to a stored vector.
-## Phase 2 — _pending_
+## Phase 2 — On-device OCR + semantic retrieval (code complete; numbers pending the M5 measurement run)
+
+Engineering done (real); every number below is **TBD** until the single M5 run, and no number is written until measured (cardinal rule).
+
+- Added Apple **Vision** on-device OCR to each kept frame and a parallel index-aligned text sidecar, so the engine retains recognized text beside each vector while still never writing a frame; resolved the OCR-vs-embed resolution conflict by capturing at native resolution for OCR and downscaling to 256×256 (vImage) for the encoder, with both buffers `memset` before release. _OCR latency: TBD (M5)._
+- Exported the **MobileCLIP text encoder** to Core ML through the same `torch.export` path as the image encoder and built a natural-language retrieval CLI that ranks stored image vectors by cosine similarity (vectors pre-normalized, so cosine = dot product over the fixed-stride store). _Text-encoder export cosine vs PyTorch: TBD; retrieval top-1 / precision@5 / MRR on a hand-labeled set: TBD (machine-independent)._
+- Made the Swift engine build cleanly cross-architecture (Intel + Apple Silicon) so development happens on one machine and the authoritative numbers are measured once on the Neural Engine machine.
+
 ## Phase 3 — _pending_
 ## Phase 4 — _pending_
