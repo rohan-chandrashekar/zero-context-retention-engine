@@ -21,5 +21,11 @@ Engineering done (real); every number below is **TBD** until the single M5 run, 
 - Exported the **MobileCLIP text encoder** to Core ML through the same `torch.export` path as the image encoder and built a natural-language retrieval CLI that ranks stored image vectors by cosine similarity (vectors pre-normalized, so cosine = dot product over the fixed-stride store). _Text-encoder export cosine vs PyTorch: TBD; retrieval top-1 / precision@5 / MRR on a hand-labeled set: TBD (machine-independent)._
 - Made the Swift engine build cleanly cross-architecture (Intel + Apple Silicon) so development happens on one machine and the authoritative numbers are measured once on the Neural Engine machine.
 
-## Phase 3 — _pending_
+## Phase 3 — Privacy red-team + defense (code complete; fidelity numbers pending the M5 run)
+
+Engineering done (real); the machine-independent attack/defense math is verified by numpy-only self-tests (`selftest_defense.py`, `selftest_retrieval.py`). Every fidelity number is **TBD** until measured on real vectors on the M5, and no privacy outcome is assumed in advance.
+
+- Built two attacks against the engine's own vector store, with no image available to the attacker: a **semantic-leakage** attack that recovers what was on screen by scoring stored image vectors against a sensitive-label vocabulary through the MobileCLIP text encoder, and a **feature-inversion** decoder that reconstructs a 64×64 image from a 512-d embedding (SSIM-scored). _Top-1 recovery and inversion SSIM: TBD (M5)._
+- Implemented three in-place vector defenses — PCA low-rank, scalar quantization, and additive Gaussian (DP-style) noise with an indicative ε — and a before/after harness that measures attack-fidelity collapse against retained Phase 2 retrieval accuracy, so the privacy/utility trade-off is a measured curve, not a slogan. _Before/after table: TBD (M5)._
+
 ## Phase 4 — _pending_

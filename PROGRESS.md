@@ -11,7 +11,7 @@ Phase 2 is **code complete and builds clean** (`swift build -c release`, no warn
 - [x] Phase 0 — MobileCLIP-S2 to Core ML conversion + embedding benchmark
 - [x] Phase 1 — Capture spine + zero-retention proof (measured on Apple M5; live run + fs_usage proof done)
 - [ ] Phase 2 — On-device OCR + semantic retrieval (code complete + builds clean on Intel; export verify + retrieval precision + latency all pending measurement)
-- [ ] Phase 3 — Privacy red-team + defense
+- [ ] Phase 3 — Privacy red-team + defense (code complete; machine-independent math self-tested on Intel; attack/defense fidelity numbers pending the M5 run)
 - [ ] Phase 4 — Benchmarks + visualizer + storytelling
 
 ## Measured numbers (Phase 0)
@@ -67,6 +67,16 @@ Measured numbers (Phase 2): **all TBD — nothing measured yet.** Reasons and ho
 - Retrieval top-1 / precision@5 / MRR — TBD; needs a real capture of known content + a hand-labeled `labels.json`. Machine-independent in value (CPU vectors == ANE vectors modulo FP16), but producing the vectors and query embeddings needs the model toolchain, which only runs on the M5 — so measured there.
 
 The machine-independent retrieval *plumbing* (store binary round-trip, index alignment, cosine ranking) is verified now on Intel by `scripts/selftest_retrieval.py` (numpy-only, no torch/coremltools), so the format and ranking math are not left untested.
+
+## Phase 3 — code complete, fidelity numbers pending
+
+Attacks (Python, operate only on the vector store — the attacker never has an image):
+- `attack_semantic_leakage.py` — scores each stored image vector against a candidate-text vocabulary (`leakage_vocab.txt`, sensitive labels like bank login / medical record / password manager) embedded with the Core ML text encoder; the top label is the recovered guess. Reports mean top-1 cosine and per-moment top-3 recovered labels (with the OCR text as a ground-truth hint).
+- `attack_inversion.py` — trains a small ConvTranspose decoder on the attacker's own (image, embedding) pairs to map embedding -> 64×64 image, then inverts the stored embeddings; reports mean SSIM (scikit-image) clean vs under each defense. torch + skimage, so M5-run.
+
+Defenses (`redteam_common.py`, applied by `defense.py`, swept by `eval_defense.py`): in-place 512-d vector maps so the store format and Phase 2 retrieval are unchanged — PCA low-rank reconstruction, scalar quantization (per-vector min/max), additive Gaussian noise (with an indicative Gaussian-mechanism ε via `gaussian_epsilon`; documented as indicative, not a formal (ε,δ)-DP guarantee). `eval_defense.py` prints the before/after table: leakage agreement-vs-undefended + attacker confidence against retained retrieval top-1 / precision@k, swept over none / pca / quantize / dpnoise.
+
+Measured numbers (Phase 3): **all TBD.** They need the Core ML encoders run on real captured vectors (M5) plus, for leakage recovery rate and retrieval retention, a hand-labeled set. **No privacy outcome is assumed** — additive noise on L2-normalized embeddings only injects σ-scale noise into the cosine score, so it is an open empirical question whether any defense collapses attack fidelity while keeping retrieval usable; the eval reports the real curve. The machine-independent math (PCA/quantize/noise transforms, leakage scoring, metrics, store round-trip) is verified now on Intel by `selftest_defense.py` and `selftest_retrieval.py` (numpy-only, both passing).
 
 ## Known issues / open threads
 - Pure-ANE latency from Xcode's Performance report is still TBD — it needs the Xcode GUI; the 3.00 ms figure is `predict()` wall-clock and is an upper bound on compute. The M5 run machine has only the Command Line Tools (no full Xcode), so the Performance report can't be run there either; defer to a machine with Xcode.

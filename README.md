@@ -95,12 +95,30 @@ python scripts/dump_store.py        # list every stored moment (idx, time, OCR s
 python scripts/eval_retrieval.py --labels vectorstore/labels.json --k 5
 ```
 
-### Privacy red-team (Phase 3)
+### Privacy red-team + defense (Phase 3 — the differentiator)
 
-| Defense | Reconstruction fidelity (↓ better) | Retrieval accuracy retained (↑ better) |
-|---|---|---|
-| None (raw vectors) | _tbd_ | _tbd_ |
-| + defense | _tbd_ | _tbd_ |
+The privacy claim is attacked, then defended, with real measured numbers. Two attacks run against the stored vectors (no image is ever available to the attacker):
+
+- **Semantic leakage** (`scripts/attack_semantic_leakage.py`): each stored image vector is scored against a candidate-text vocabulary (`scripts/leakage_vocab.txt` — "a bank login page", "a medical record", "a password manager", …) embedded with the MobileCLIP text encoder. The top-scoring label is the attacker's recovered guess of what was on screen. Fidelity is reported as the attacker's mean top-1 cosine and, under defense, how much of the recovered label set survives.
+- **Feature inversion** (`scripts/attack_inversion.py`): a small decoder is trained on the attacker's own (image, embedding) pairs to map a 512-d embedding back to a 64×64 image, then used to reconstruct the stored embeddings. Fidelity is mean **SSIM** vs the originals.
+
+Defenses (`scripts/defense.py`, swept by `scripts/eval_defense.py`) transform the stored 512-d vectors in place, keeping the store format so Phase 2 retrieval still runs: **PCA** low-rank reconstruction, scalar **quantization**, and additive **Gaussian (DP-style) noise**. The eval reports attack fidelity collapse *against* retained retrieval accuracy — a defense is only good if it pushes the attack down while holding legitimate retrieval up.
+
+The machine-independent math (defenses, leakage scoring, retrieval-retention, store round-trip) is verified now by `scripts/selftest_defense.py` and `scripts/selftest_retrieval.py` (numpy-only). All *fidelity numbers* are **TBD** — they require running the MobileCLIP encoders on real captured vectors, which only runs on Apple Silicon (the M5), and a hand-labeled set. **No outcome is asserted in advance:** whether additive noise can separate leakage from retrieval, or whether PCA/quantization do it better, is reported from the measured run, not assumed.
+
+| Defense | Leakage: top-1 label retained vs undefended (↓ better) | Inversion SSIM (↓ better) | Retrieval precision@5 retained (↑ better) |
+|---|---|---|---|
+| None (raw vectors) | _TBD (M5)_ | _TBD (M5)_ | _TBD (M5)_ |
+| PCA (k=64) | _TBD (M5)_ | _TBD (M5)_ | _TBD (M5)_ |
+| Quantize (4-bit) | _TBD (M5)_ | _TBD (M5)_ | _TBD (M5)_ |
+| Gaussian noise (σ sweep) | _TBD (M5)_ | _TBD (M5)_ | _TBD (M5)_ |
+
+```bash
+python scripts/attack_semantic_leakage.py --show 20          # what the attacker recovers from vectors alone
+python scripts/attack_inversion.py --images attack_images    # train inversion decoder, report SSIM
+python scripts/eval_defense.py --labels vectorstore/labels.json   # before/after leakage vs retrieval table
+python scripts/selftest_defense.py                           # numpy-only: defenses + scoring math (runs anywhere)
+```
 
 ## Architecture
 
